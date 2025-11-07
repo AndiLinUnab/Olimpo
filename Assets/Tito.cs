@@ -1,90 +1,60 @@
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 public class Tito : MonoBehaviour
 {
-    [Header("Configuración de Movimiento")]
-    [SerializeField] private float speed = 5f;
-    [SerializeField] private float rotationSpeed = 10f;
-
-    [Header("Configuración de Cámara")]
-    [SerializeField] private Transform cameraTransform;
-
-    [Header("Configuración de Gravedad y Salto")]
-    [SerializeField] private float gravity = -9.81f;
-    [SerializeField] private float jumpHeight = 2f;
-
-    [Header("Límite de Caída")]
-    [SerializeField] private float fallLimit = -10f;
-
-    private CharacterController controller;
-    private Vector3 velocity;
-
+    [Header("Movimiento")]
+    public float velocidadMovimiento = 5f;
+    public float fuerzaSalto = 7f;
+    
+    [Header("Detección de Suelo")]
+    public float alturaRaycast = 1.1f;
+    
+    private Rigidbody rb;
+    private bool estaEnSuelo;
+    
     void Start()
     {
-        controller = GetComponent<CharacterController>();
-
-        if (controller == null)
-        {
-            Debug.LogError("⚠️ No se encontró un CharacterController en este GameObject.");
-        }
+        rb = GetComponent<Rigidbody>();
+        
+        // Configurar Rigidbody
+        rb.constraints = RigidbodyConstraints.FreezeRotation;
     }
-
+    
     void Update()
     {
-        HandleMovementAndJump();
-        CheckFallOffMap();
+        // Verificar si está en el suelo con Raycast
+        estaEnSuelo = Physics.Raycast(transform.position, Vector3.down, alturaRaycast);
+        
+        // Saltar con ESPACIO
+        if (Input.GetKeyDown(KeyCode.Space) && estaEnSuelo)
+        {
+            rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+            rb.AddForce(Vector3.up * fuerzaSalto, ForceMode.Impulse);
+        }
     }
-
-    void HandleMovementAndJump()
+    
+    void FixedUpdate()
     {
-        float horizontal = Input.GetAxis("Horizontal");
-        float vertical = Input.GetAxis("Vertical");
-
-        Vector3 inputDir = new Vector3(horizontal, 0f, vertical).normalized;
-        Vector3 moveDir = Vector3.zero;
-
-        // ✅ SOLO procesar rotación SI HAY INPUT
-        if (inputDir.magnitude >= 0.1f)
-        {
-            // Calcular ángulo objetivo
-            float targetAngle = Mathf.Atan2(inputDir.x, inputDir.z) * Mathf.Rad2Deg + cameraTransform.eulerAngles.y;
-
-            // Rotar hacia el ángulo objetivo
-            float angle = Mathf.LerpAngle(transform.eulerAngles.y, targetAngle, rotationSpeed * Time.deltaTime);
-            transform.rotation = Quaternion.Euler(0f, angle, 0f);
-
-            // Mover hacia adelante
-            moveDir = transform.forward * speed;
-        }
-        // ✅ SI NO HAY INPUT: NO TOCAR transform.rotation EN ABSOLUTO
-
-        // --- Gravedad y salto ---
-        if (controller.isGrounded)
-        {
-            if (velocity.y < 0)
-                velocity.y = -2f;
-
-            if (Input.GetButtonDown("Jump"))
-            {
-                velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
-            }
-        }
-        else
-        {
-            velocity.y += gravity * Time.deltaTime;
-        }
-
-        // --- Movimiento combinado (horizontal + vertical) ---
-        Vector3 totalMove = (moveDir + new Vector3(0, velocity.y, 0)) * Time.deltaTime;
-        controller.Move(totalMove);
+        // Movimiento con WASD
+        float horizontal = 0f;
+        float vertical = 0f;
+        
+        if (Input.GetKey(KeyCode.W)) vertical = 1f;      // Adelante
+        if (Input.GetKey(KeyCode.S)) vertical = -1f;     // Atrás
+        if (Input.GetKey(KeyCode.A)) horizontal = -1f;   // Izquierda
+        if (Input.GetKey(KeyCode.D)) horizontal = 1f;    // Derecha
+        
+        // Aplicar movimiento relativo a la rotación del personaje
+        Vector3 movimiento = transform.right * horizontal + transform.forward * vertical;
+        movimiento = movimiento.normalized * velocidadMovimiento;
+        
+        rb.linearVelocity = new Vector3(movimiento.x, rb.linearVelocity.y, movimiento.z);
     }
-
-    void CheckFallOffMap()
+    
+    // Visualizar el raycast en el editor
+    void OnDrawGizmos()
     {
-        if (transform.position.y < fallLimit)
-        {
-            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-        }
+        Gizmos.color = Color.red;
+        Gizmos.DrawLine(transform.position, transform.position + Vector3.down * alturaRaycast);
     }
 }
