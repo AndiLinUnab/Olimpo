@@ -40,76 +40,23 @@ public class Lava : MonoBehaviour
         }
     }
 
-    void Update()
-    {
-        if (jugador == null || jugadorMuerto) return;
 
-        // Verificar si Tito está tocando la lava
-        if (EstaTocandoLava())
-        {
-            MatarJugador();
-        }
-    }
 
-    bool EstaTocandoLava()
-    {
-        if (lavaCollider == null) return false;
-
-        Vector3 posJugador = jugador.position;
-        Bounds bounds = lavaCollider.bounds;
-
-        // Verificación vertical: está a la altura de la lava o por debajo
-        float alturaLava = bounds.max.y;  // Parte superior de la lava
-
-        if (posJugador.y <= alturaLava + margenDeteccion)
-        {
-            // Verificar que esté dentro del área horizontal (X y Z)
-            Vector3 posHorizontal = new Vector3(posJugador.x, alturaLava, posJugador.z);
-
-            // Expandir los bounds un poco para el margen
-            Bounds expandedBounds = bounds;
-            expandedBounds.Expand(margenDeteccion * 2);
-
-            if (expandedBounds.Contains(posHorizontal))
-            {
-                if (mostrarDebugRayos)
-                {
-                    Debug.DrawLine(jugador.position, posHorizontal, Color.red, 0.1f);
-                    Debug.DrawLine(posHorizontal, new Vector3(posHorizontal.x, bounds.min.y, posHorizontal.z), Color.yellow, 0.1f);
-                }
-                return true;
-            }
-        }
-
-        if (mostrarDebugRayos)
-        {
-            Debug.DrawLine(jugador.position, new Vector3(posJugador.x, alturaLava, posJugador.z), Color.green, 0.1f);
-        }
-
-        return false;
-    }
-
-    // Trigger como método de respaldo
+    // 🔸 Mata al jugador solo si entra en el collider de la lava
     void OnTriggerEnter(Collider other)
     {
         if (jugadorMuerto) return;
 
-        // Verificar si es el jugador
-        if (jugador != null && (other.transform == jugador || other.transform.IsChildOf(jugador)))
-        {
+        if (other.transform == jugador || other.transform.IsChildOf(jugador))
             MatarJugador();
-        }
     }
 
-    // Trigger continuo (mientras está dentro)
     void OnTriggerStay(Collider other)
     {
         if (jugadorMuerto) return;
 
-        if (jugador != null && (other.transform == jugador || other.transform.IsChildOf(jugador)))
-        {
+        if (other.transform == jugador || other.transform.IsChildOf(jugador))
             MatarJugador();
-        }
     }
 
     void MatarJugador()

@@ -67,7 +67,7 @@ public class Tito : MonoBehaviour
 
             if (Input.GetButtonDown("Jump"))
             {
-                velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+                velocity.y = Mathf.Sqrt(jumpHeight * -0.6f * gravity);
             }
         }
         else
