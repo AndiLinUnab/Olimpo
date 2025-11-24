@@ -4,72 +4,75 @@ public class EsqueletoSimple : MonoBehaviour
 {
     [Header("Configuración Movimiento")]
     public Transform objetivo;
-    public float velocidad = 3f;
+    public float velocidad = 2.5f;
     public float rangoDeteccion = 10f;
-    public float rangoAtaque = 2f; // Aumentado un poco para que no se pegue tanto
+    public float rangoAtaque = 3.0f; // Mantén esto en 2.0 para que no te encime
 
-    [Header("Combate")]
+    [Header("COMBATE")]
+    public Transform puntoAtaque;
+    public float radioGolpe = 1.5f;
+    public LayerMask capaJugador;
+
+    [Header("Vida")]
     public int vida = 3;
     public float cooldownAtaque = 2f;
     private float tiempoProximoAtaque;
-
-    [Header("Referencias")]
-    public GameObject[] corazonesUI;
     public PuertaSalida paredParaAbrir;
 
     private Animator anim;
-    private DanoGolpe scriptDanoPuno;
-    private CharacterController enemyController; // <--- NUEVO
+    private CharacterController enemyController;
     private bool muerto = false;
 
     void Start()
     {
         anim = GetComponent<Animator>();
-        scriptDanoPuno = GetComponentInChildren<DanoGolpe>();
-        enemyController = GetComponent<CharacterController>(); // <--- NUEVO
-
-        if (scriptDanoPuno != null) scriptDanoPuno.tagObjetivo = "Player";
+        enemyController = GetComponent<CharacterController>();
 
         if (objetivo == null && GameObject.FindGameObjectWithTag("Player") != null)
-        {
             objetivo = GameObject.FindGameObjectWithTag("Player").transform;
-        }
     }
 
     void Update()
     {
-        if (muerto || objetivo == null) return;
+        if (muerto) return; // Si está muerto, no hace NADA más.
 
-        // Calculamos la distancia ignorando la altura (para que no se confunda si Tito salta)
-        Vector3 posicionTitoPlana = new Vector3(objetivo.position.x, 0, objetivo.position.z);
-        Vector3 miPosicionPlana = new Vector3(transform.position.x, 0, transform.position.z);
-        float distancia = Vector3.Distance(miPosicionPlana, posicionTitoPlana);
+        if (objetivo == null) return;
 
-        // Aplicar gravedad simple para que no flote
-        Vector3 movimientoGravedad = new Vector3(0, -9.81f, 0);
-        enemyController.Move(movimientoGravedad * Time.deltaTime);
+        Vector3 movimientoFinal = Vector3.zero;
 
-        // 1. SI ESTÁ DENTRO DEL RANGO DE VISIÓN
+        // 1. Calcular distancias (Plano XZ)
+        Vector3 miPos = new Vector3(transform.position.x, 0, transform.position.z);
+        Vector3 titoPos = new Vector3(objetivo.position.x, 0, objetivo.position.z);
+        float distancia = Vector3.Distance(miPos, titoPos);
+
+        // 2. GRAVEDAD (Siempre se aplica para que no flote)
+        if (!enemyController.isGrounded)
+        {
+            movimientoFinal.y = -9.81f;
+        }
+
+        // 3. LÓGICA DE IA
         if (distancia < rangoDeteccion)
         {
-            // Mirar a Tito (Solo en el eje Y, para que no se incline)
-            Vector3 mirarA = new Vector3(objetivo.position.x, transform.position.y, objetivo.position.z);
-            transform.LookAt(mirarA);
+            // Rotar hacia Tito
+            Vector3 direccion = (titoPos - miPos).normalized;
+            if (direccion != Vector3.zero)
+            {
+                Quaternion rotacion = Quaternion.LookRotation(direccion);
+                transform.rotation = Quaternion.Slerp(transform.rotation, rotacion, 5f * Time.deltaTime);
+            }
 
-            // 2. SI ESTÁ LEJOS PARA PEGAR, CAMINA
+            // DECISIÓN: ¿CAMINAR O ATACAR?
             if (distancia > rangoAtaque)
             {
-                // Calcular dirección hacia Tito
-                Vector3 direccion = (objetivo.position - transform.position).normalized;
-                // Moverse usando el Controller (Esto respeta paredes)
-                Vector3 movimiento = direccion * velocidad * Time.deltaTime;
-                enemyController.Move(movimiento);
-
+                // CAMINAR: Añadimos velocidad al movimiento
+                movimientoFinal.x = direccion.x * velocidad;
+                movimientoFinal.z = direccion.z * velocidad;
                 anim.SetFloat("Speed", 1);
             }
-            // 3. SI ESTÁ CERCA, ATACA
             else
             {
+                // ATACAR: No sumamos nada a X ni Z, se queda quieto.
                 anim.SetFloat("Speed", 0);
 
                 if (Time.time >= tiempoProximoAtaque)
@@ -82,42 +85,60 @@ public class EsqueletoSimple : MonoBehaviour
         {
             anim.SetFloat("Speed", 0);
         }
+
+        // 4. APLICAR MOVIMIENTO FINAL
+        // Movemos el controller una sola vez por frame con todos los cálculos
+        enemyController.Move(movimientoFinal * Time.deltaTime);
     }
 
     void Atacar()
     {
         anim.SetTrigger("Attack");
         tiempoProximoAtaque = Time.time + cooldownAtaque;
-        Invoke("ActivarHitbox", 0.3f);
-        Invoke("DesactivarHitbox", 0.8f);
+        Invoke("EjecutarGolpe", 0.4f);
     }
 
-    void ActivarHitbox() { if (scriptDanoPuno != null) scriptDanoPuno.ActivarHitbox(); }
-    void DesactivarHitbox() { if (scriptDanoPuno != null) scriptDanoPuno.DesactivarHitbox(); }
+    void EjecutarGolpe()
+    {
+        if (muerto || puntoAtaque == null) return;
+
+        Collider[] jugadorgolpeado = Physics.OverlapSphere(puntoAtaque.position, radioGolpe, capaJugador);
+        foreach (Collider jugador in jugadorgolpeado)
+        {
+            // Buscamos el script de salud directamente
+            TitoSalud saludTito = jugador.GetComponentInParent<TitoSalud>();
+            if (saludTito != null)
+            {
+                saludTito.RecibirDano(1);
+            }
+        }
+    }
+
+    void OnDrawGizmosSelected()
+    {
+        if (puntoAtaque != null)
+        {
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireSphere(puntoAtaque.position, radioGolpe);
+        }
+    }
 
     public void RecibirDano(int cantidad)
     {
         if (muerto) return;
         vida -= cantidad;
         anim.SetTrigger("Hit");
-        ActualizarCorazones();
         if (vida <= 0) Morir();
-    }
-
-    void ActualizarCorazones()
-    {
-        for (int i = 0; i < corazonesUI.Length; i++)
-        {
-            if (i < vida) corazonesUI[i].SetActive(true);
-            else corazonesUI[i].SetActive(false);
-        }
     }
 
     void Morir()
     {
-        muerto = true;
+        muerto = true; // Esto bloquea el Update inmediatamente
         anim.SetBool("Die", true);
-        enemyController.enabled = false; // Apagar controller al morir
+
+        // Desactivar el controller para que Tito pueda atravesar el cadáver y no se choque
+        enemyController.enabled = false;
+
         if (paredParaAbrir != null) paredParaAbrir.AbrirPared();
         Destroy(gameObject, 5f);
     }

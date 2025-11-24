@@ -2,21 +2,28 @@ using UnityEngine;
 
 public class DanoGolpe : MonoBehaviour
 {
-    public string tagObjetivo; // A quién quiero pegar ("Enemigo" o "Player")
+    public string tagObjetivo; // "Enemigo" para Tito, "Player" para Esqueleto
     public int dano = 1;
     private bool puedeGolpear = false;
 
-    // Este método lo llamaremos desde el script principal cuando se lance la animación
     public void ActivarHitbox() { puedeGolpear = true; }
     public void DesactivarHitbox() { puedeGolpear = false; }
 
     private void OnTriggerEnter(Collider other)
     {
-        if (puedeGolpear && other.CompareTag(tagObjetivo))
+        // Solo procesamos si el hitbox está activo
+        if (puedeGolpear)
         {
-            // Enviamos el mensaje de daño al objeto que tocamos
-            other.SendMessage("RecibirDano", dano, SendMessageOptions.DontRequireReceiver);
-            puedeGolpear = false; // Desactivar para no pegar 2 veces en el mismo frame
+            // Chequeo de seguridad por si te golpeas a ti mismo
+            if (other.gameObject == transform.root.gameObject) return;
+
+            if (other.CompareTag(tagObjetivo))
+            {
+                Debug.Log("¡GOLPE CONECTADO! He pegado a: " + other.name); // <--- MIRA LA CONSOLA
+
+                other.SendMessage("RecibirDano", dano, SendMessageOptions.DontRequireReceiver);
+                puedeGolpear = false; // Desactivar para no dar doble golpe
+            }
         }
     }
 }
