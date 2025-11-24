@@ -5,6 +5,11 @@ TagManager:
   serializedVersion: 3
   tags:
   - Escalera
+  - Cristal
+  - Cofre
+  - Skeleton
+  - Tito
+  - Enemigo
   layers:
   - Default
   - TransparentFX
