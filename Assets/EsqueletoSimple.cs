@@ -3,10 +3,10 @@ using UnityEngine;
 public class EsqueletoSimple : MonoBehaviour
 {
     [Header("Configuración Movimiento")]
-    public Transform objetivo; // Arrastra a TITO aquí
+    public Transform objetivo;
     public float velocidad = 3f;
-    public float rangoDeteccion = 8f; // A qué distancia empieza a seguirte
-    public float rangoAtaque = 1.5f;  // A qué distancia se detiene para pegar
+    public float rangoDeteccion = 10f;
+    public float rangoAtaque = 2f; // Aumentado un poco para que no se pegue tanto
 
     [Header("Combate")]
     public int vida = 3;
@@ -14,20 +14,22 @@ public class EsqueletoSimple : MonoBehaviour
     private float tiempoProximoAtaque;
 
     [Header("Referencias")]
-    public GameObject[] corazonesUI; // Los 3 corazones de su cabeza
-    public PuertaSalida paredParaAbrir; // La pared que sube al morir
+    public GameObject[] corazonesUI;
+    public PuertaSalida paredParaAbrir;
+
     private Animator anim;
-    private DanoGolpe scriptDanoPuno; // El script de su mano
+    private DanoGolpe scriptDanoPuno;
+    private CharacterController enemyController; // <--- NUEVO
     private bool muerto = false;
 
     void Start()
     {
         anim = GetComponent<Animator>();
         scriptDanoPuno = GetComponentInChildren<DanoGolpe>();
+        enemyController = GetComponent<CharacterController>(); // <--- NUEVO
 
-        if (scriptDanoPuno != null) scriptDanoPuno.tagObjetivo = "Player"; // Que pegue a Tito
+        if (scriptDanoPuno != null) scriptDanoPuno.tagObjetivo = "Player";
 
-        // Si olvidaste asignar a Tito, lo busca por su Tag
         if (objetivo == null && GameObject.FindGameObjectWithTag("Player") != null)
         {
             objetivo = GameObject.FindGameObjectWithTag("Player").transform;
@@ -38,27 +40,37 @@ public class EsqueletoSimple : MonoBehaviour
     {
         if (muerto || objetivo == null) return;
 
-        // Calcular distancia entre Esqueleto y Tito
-        float distancia = Vector3.Distance(transform.position, objetivo.position);
+        // Calculamos la distancia ignorando la altura (para que no se confunda si Tito salta)
+        Vector3 posicionTitoPlana = new Vector3(objetivo.position.x, 0, objetivo.position.z);
+        Vector3 miPosicionPlana = new Vector3(transform.position.x, 0, transform.position.z);
+        float distancia = Vector3.Distance(miPosicionPlana, posicionTitoPlana);
+
+        // Aplicar gravedad simple para que no flote
+        Vector3 movimientoGravedad = new Vector3(0, -9.81f, 0);
+        enemyController.Move(movimientoGravedad * Time.deltaTime);
 
         // 1. SI ESTÁ DENTRO DEL RANGO DE VISIÓN
         if (distancia < rangoDeteccion)
         {
-            // Hacer que el esqueleto mire a Tito (pero sin inclinarse hacia arriba/abajo)
+            // Mirar a Tito (Solo en el eje Y, para que no se incline)
             Vector3 mirarA = new Vector3(objetivo.position.x, transform.position.y, objetivo.position.z);
             transform.LookAt(mirarA);
 
             // 2. SI ESTÁ LEJOS PARA PEGAR, CAMINA
             if (distancia > rangoAtaque)
             {
-                // Moverse hacia el objetivo
-                transform.position = Vector3.MoveTowards(transform.position, mirarA, velocidad * Time.deltaTime);
-                anim.SetFloat("Speed", 1); // Activar animación caminar
+                // Calcular dirección hacia Tito
+                Vector3 direccion = (objetivo.position - transform.position).normalized;
+                // Moverse usando el Controller (Esto respeta paredes)
+                Vector3 movimiento = direccion * velocidad * Time.deltaTime;
+                enemyController.Move(movimiento);
+
+                anim.SetFloat("Speed", 1);
             }
             // 3. SI ESTÁ CERCA, ATACA
             else
             {
-                anim.SetFloat("Speed", 0); // Quieto
+                anim.SetFloat("Speed", 0);
 
                 if (Time.time >= tiempoProximoAtaque)
                 {
@@ -68,17 +80,14 @@ public class EsqueletoSimple : MonoBehaviour
         }
         else
         {
-            // Si Tito está lejos, se queda quieto
             anim.SetFloat("Speed", 0);
         }
     }
 
     void Atacar()
     {
-        anim.SetTrigger("Attack"); // Animación puñetazo
+        anim.SetTrigger("Attack");
         tiempoProximoAtaque = Time.time + cooldownAtaque;
-
-        // Activar daño justo un momento después (puedes ajustar el 0.3f)
         Invoke("ActivarHitbox", 0.3f);
         Invoke("DesactivarHitbox", 0.8f);
     }
@@ -86,28 +95,21 @@ public class EsqueletoSimple : MonoBehaviour
     void ActivarHitbox() { if (scriptDanoPuno != null) scriptDanoPuno.ActivarHitbox(); }
     void DesactivarHitbox() { if (scriptDanoPuno != null) scriptDanoPuno.DesactivarHitbox(); }
 
-    // --- SISTEMA DE VIDA ---
     public void RecibirDano(int cantidad)
     {
         if (muerto) return;
-
         vida -= cantidad;
-        anim.SetTrigger("Hit"); // Animación de dolor
+        anim.SetTrigger("Hit");
         ActualizarCorazones();
-
-        if (vida <= 0)
-        {
-            Morir();
-        }
+        if (vida <= 0) Morir();
     }
 
     void ActualizarCorazones()
     {
-        // Recorremos los corazones de la UI
         for (int i = 0; i < corazonesUI.Length; i++)
         {
-            if (i < vida) corazonesUI[i].SetActive(true); // Visible
-            else corazonesUI[i].SetActive(false); // Invisible
+            if (i < vida) corazonesUI[i].SetActive(true);
+            else corazonesUI[i].SetActive(false);
         }
     }
 
@@ -115,14 +117,8 @@ public class EsqueletoSimple : MonoBehaviour
     {
         muerto = true;
         anim.SetBool("Die", true);
-
-        // Desactivar colisiones para que no estorbe
-        GetComponent<Collider>().enabled = false;
-
-        // Abrir la pared
+        enemyController.enabled = false; // Apagar controller al morir
         if (paredParaAbrir != null) paredParaAbrir.AbrirPared();
-
-        // Destruir el cuerpo luego de 5 segundos
         Destroy(gameObject, 5f);
     }
 }
